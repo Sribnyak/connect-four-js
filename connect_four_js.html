@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Connect Four!</title>
+  <style>
+    body, html {
+      width: 100%;
+      height: 100%;
+      padding: 0px;
+      margin: 0px;
+      overflow: hidden;
+    }
+    canvas {
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" width="0" height="0"></canvas>
+  <script>
+    let cvs = document.getElementById('canvas')
+    let ctx = cvs.getContext('2d')
+    
+    
+    let ROWS = 6 // in blocks
+    let COLS = 7 // must be less than 10 to work with keyboard correctly
+    let N_TO_WIN = 4
+    let MID_COL = 3
+    
+    let BLOCK_WIDTH = 10 // in 'units'
+    let BLOCK_HEIGHT = 8
+    let RADIUS = 3
+    let WIDTH = COLS * BLOCK_WIDTH + 2 // empty - cols - empty
+    let HEIGHT = (ROWS + 1) * BLOCK_HEIGHT + 3 // empty row - fill - rows - fill - empty
+    
+    let BLUE = '#228'
+    let WHITE = '#fff'
+    let RED = '#d00'
+    let YELLOW = '#fd0'
+    
+    let unit = 10 // reassigned later
+    let x0 = 0
+    let y0 = 0
+    
+    let state = 'welcome'
+    let currentTurn = 1
+    let selectedColumn = MID_COL
+    let field = []
+    for (let i = 0; i < ROWS; i++) {
+        field.push([])
+        for (let j = 0; j < COLS; j++) {
+            field[i].push(0)
+        }
+    }
+    
+    resizeCvs()
+    welcome()
+    
+    function resizeCvs() {
+        cvs.width = window.innerWidth;
+        cvs.height = window.innerHeight;
+        unit = Math.min(Math.floor(cvs.width / WIDTH), Math.floor(cvs.height / HEIGHT))
+        x0 = Math.floor((cvs.width - WIDTH * unit) / 2)
+        y0 = Math.floor((cvs.height - HEIGHT * unit) / 2)
+    }
+    
+    function welcome() {
+        let size = 5 * unit
+        let text = ['Welcome to Connect Four!',
+                    '',
+                    'In this text I could tell you',
+                    'the rules of the game and',
+                    'the controls, but I won\'t :)',
+                    '',
+                    'Now guess how to start']
+        ctx.fillStyle = BLUE
+        ctx.font = 'bold ' + size + 'px Century Gothic'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        for (let i = 0; i < 7; i++)
+            ctx.fillText(text[i], x0 + WIDTH / 2 * unit, y0 + HEIGHT / 2 * unit + (i - 3) * size)
+    }
+    
+    function reload() {
+        state = 'turn'
+        currentTurn = 1
+        selectedColumn = MID_COL
+        for (let i = 0; i < ROWS; i++)
+            for (let j = 0; j < COLS; j++)
+                field[i][j] = 0
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        drawField()
+        updateBlock(-1, selectedColumn, getPlayerColour(currentTurn))
+    }
+    
+    function drawField() {
+        ctx.fillStyle = BLUE
+        ctx.fillRect(x0 + unit, y0 + BLOCK_HEIGHT * unit,
+            COLS * BLOCK_WIDTH * unit, (ROWS * BLOCK_HEIGHT + 2) * unit)
+        for (let i = 0; i < ROWS; i++) {
+            for (let j = 0; j < COLS; j++) {
+                updateBlock(i, j, WHITE)
+            }
+        }
+    }
+    
+    function updateBlock(i, j, colour, bg=BLUE) {
+        let x = x0 + (1 + j * BLOCK_WIDTH) * unit
+        let y = y0 + (1 + (i + 1) * BLOCK_HEIGHT) * unit
+        if (i == -1) {
+            y -= unit
+            bg = WHITE
+        }
+        fillCircle(x + BLOCK_WIDTH / 2 * unit, y + BLOCK_HEIGHT / 2 * unit, (RADIUS + 0.5) * unit, bg)
+        fillCircle(x + BLOCK_WIDTH / 2 * unit, y + BLOCK_HEIGHT / 2 * unit, RADIUS * unit, colour)
+    }
+    
+    function fillCircle(x, y, r, colour) {
+        ctx.beginPath()
+        ctx.arc(x, y, r, 0, 2 * Math.PI, false)
+        ctx.fillStyle = colour
+        ctx.fill()
+    }
+    
+    function showWin(line) {
+        let winner = field[line.y0][line.x0]
+        for (let i = 0; i < line.len; i++) {
+            updateBlock(line.y0 + i * line.dy, line.x0 + i * line.dx, getPlayerColour(winner), getPlayerColour(-winner))
+        }
+        printText((winner == 1 ? 'Red' : 'Yellow') + ' wins! Restart?')
+    }
+    
+    function showDraw() {
+        printText('Draw. Restart?')
+    }
+    
+    function printText(text) {
+        ctx.fillStyle = BLUE
+        ctx.font = 'bold ' + (BLOCK_HEIGHT - 2) * unit + 'px Century Gothic'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'alphabetic'
+        ctx.fillText(text, x0 + WIDTH / 2 * unit, y0 + (BLOCK_HEIGHT - 2) * unit)
+    }
+    
+    function getPlayerColour(id) {
+        return id == 1 ? RED : YELLOW
+    }
+    
+    function onColumnSelected(col) {
+        updateBlock(-1, selectedColumn, WHITE)
+        selectedColumn = col
+        updateBlock(-1, col, getPlayerColour(currentTurn))
+    }
+    
+    function dropDisc() {
+        let depth = getLastEmptyBlock(selectedColumn)
+        if (depth >= 0) {
+            field[depth][selectedColumn] = currentTurn
+            updateBlock(-1, selectedColumn, WHITE)
+            updateBlock(depth, selectedColumn, getPlayerColour(currentTurn))
+            
+            line = getLineWith(selectedColumn, depth)
+            if (line.len >= N_TO_WIN) {
+                state = 'end'
+                showWin(line)
+            } else if (depth == 0 && !field[0].includes(0)) {
+                state = 'end'
+                showDraw()
+            } else {
+                currentTurn = -currentTurn
+                selectedColumn = MID_COL
+                updateBlock(-1, selectedColumn, getPlayerColour(currentTurn))
+            }
+        }
+    }
+    
+    function getLineWith(col, row) {
+        let lines = []
+        for (let dir of [[1, -1], [1, 0], [1, 1], [0, 1]])
+            lines.push(growLine(col, row, dir[0], dir[1]))
+        return getLongestLine(lines)
+    }
+    
+    function growLine(x0, y0, dx, dy) {
+        let len = 1
+        let x = x0 - dx
+        let y = y0 - dy
+        while (x >= 0 && x < COLS && y >= 0 && y < ROWS && field[y][x] == field[y0][x0]) {
+            x -= dx
+            y -= dy
+            len++
+        }
+        x0 = x + dx
+        y0 = y + dy
+        x = x0 + dx * len
+        y = y0 + dy * len
+        while (x >= 0 && x < COLS && y >= 0 && y < ROWS && field[y][x] == field[y0][x0]) {
+            x += dx
+            y += dy
+            len++
+        }
+        return {x0, y0, dx, dy, len}
+    }
+    
+    function getLongestLine(lines) {
+        let ans = 0
+        for (let i = 1; i < lines.length; i++)
+            if (lines[i].len > lines[ans].len)
+                ans = i
+        return lines[ans]
+    }
+    
+    function getLastEmptyBlock(col) {
+        let cnt = 0
+        while (cnt < ROWS && field[cnt][col] == 0)
+            cnt++
+        return cnt-1
+    }
+    
+    
+    let zones = []
+    for (let i = 0; i < COLS; i++)
+        zones.push(newRect(x0 + (2 + i * BLOCK_WIDTH) * unit, y0,
+                            (BLOCK_WIDTH - 2) * unit, (ROWS * BLOCK_HEIGHT - 2) * unit))
+    let bottomZone = newRect(x0 + unit, y0 + (ROWS * BLOCK_HEIGHT) * unit,
+                              (WIDTH - 2) * unit, (BLOCK_HEIGHT + 2) * unit)
+    
+    function newRect(left, up, width, height) {
+        rect = new Path2D()
+        rect.rect(left, up, width, height)
+        return rect
+    }
+    
+    cvs.onclick = function(event) {
+        if (state == 'end' || state == 'welcome')
+            reload()
+        else if (state == 'turn') {
+            if (ctx.isPointInPath(bottomZone, event.offsetX, event.offsetY))
+                dropDisc()
+            else {
+                for (let i = 0; i < COLS; i++) {
+                    if (ctx.isPointInPath(zones[i], event.offsetX, event.offsetY)) {
+                        onColumnSelected(i)
+                        break
+                    }
+                }
+            }
+        }
+    }
+    
+    document.addEventListener('keydown', function(event) {
+        if (!event.repeat) {
+            if (state == 'turn') {
+                if (['Space', 'Enter', 'NumpadEnter', 'ArrowDown', 'KeyS', 'Numpad5', 'Numpad2', 'Numpad0'].includes(event.code))
+                    dropDisc()
+                else if (selectedColumn > 0 && ['KeyA', 'ArrowLeft', 'Numpad4'].includes(event.code))
+                    onColumnSelected(selectedColumn - 1)
+                else if (selectedColumn < COLS - 1 && ['KeyD', 'ArrowRight', 'Numpad6'].includes(event.code))
+                    onColumnSelected(selectedColumn + 1)
+                else if (event.code.startsWith('Digit')) {
+                    let col = +(event.code[5]) - 1
+                    if (col >= 0 && col < COLS)
+                        onColumnSelected(col)
+                }
+            } else if ((state == 'end' || state == 'welcome') && ['Space', 'Enter', 'NumpadEnter', 'KeyR', 'KeyY', 'Numpad5'].includes(event.code))
+                reload()
+        } else if (state == 'turn') {
+            if (selectedColumn > 0 && ['KeyA', 'ArrowLeft', 'Numpad4'].includes(event.code))
+                onColumnSelected(selectedColumn - 1)
+            else if (selectedColumn < COLS - 1 && ['KeyD', 'ArrowRight', 'Numpad6'].includes(event.code))
+                    onColumnSelected(selectedColumn + 1)
+        }
+    })
+    
+  </script>
+</body>
+</html>
